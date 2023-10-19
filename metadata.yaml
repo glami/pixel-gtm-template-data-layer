@@ -1,5 +1,5 @@
 homepage: "www.glami.cz",
 documentation: "https://www.glami.cz/info/pixel/?locale=en_US",
 versions:
-  - sha: 6dd55bb34ecc951507fc79e7ef8659e86bd89481
-    changeNotes: GLAMI logo change
+  - sha: 2d909bfe1b6cf806bbe3e3b3bef0ecb96521cca5
+    changeNotes: Initial commit - created new template
