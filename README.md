@@ -1,6 +1,7 @@
 # Glami Pixel GTM template
 
-This new template is able to read uniform GA ecommerce dataLayer model (both for UA an GA4). This model is widely used by platforms like woocommerce, magento etc.
+The new template version aims to make GLAMI Pixel integration faster and easier than ever before.
+It is designed to automatically detect proper information from the DataLayer, saving the trouble of creating custom variables for each parameter. It also consists of two Tags, instead of the previous four.
 
 [Glami homepage](https://www.glami.cz/)
 
