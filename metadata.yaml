@@ -1,5 +1,5 @@
-homepage: "www.glami.cz",
-documentation: "https://www.glami.cz/info/pixel/?locale=en_US",
+homepage: "www.glami.cz"
+documentation: "https://www.glami.cz/info/pixel/?locale=en_US"
 versions:
   - sha: 2d909bfe1b6cf806bbe3e3b3bef0ecb96521cca5
     changeNotes: Initial commit - created new template
