@@ -1,5 +1,5 @@
 homepage: "www.glami.cz"
 documentation: "https://www.glami.cz/info/pixel/?locale=en_US"
 versions:
-  - sha: f1b603d899139afc2f4c1fe039121360accc9679
-    changeNotes: Initial commit - created new template
+  - sha: 0b2428f3db005434b793e5c034988d2fac7b3690
+    changeNotes: Enhanced datalayer structure autodetection
