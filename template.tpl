@@ -45,6 +45,10 @@ ___TEMPLATE_PARAMETERS___
       {
         "value": "pageView",
         "displayValue": "Page view"
+      },
+      {
+        "value": "consentUpdate",
+        "displayValue": "Consent update"
       }
     ],
     "simpleValueType": true,
@@ -229,7 +233,35 @@ ___TEMPLATE_PARAMETERS___
         "radioItems": [
           {
             "value": "dataLayer",
-            "displayValue": "Data Layer"
+            "displayValue": "Data Layer",
+            "subParams": [
+              {
+                "type": "SELECT",
+                "name": "dataSourceDataLayerFormat",
+                "displayName": "Data Layer format",
+                "macrosInSelect": true,
+                "selectItems": [
+                  {
+                    "value": "auto",
+                    "displayValue": "Autodetect"
+                  },
+                  {
+                    "value": "gtag",
+                    "displayValue": "GTAG"
+                  },
+                  {
+                    "value": "ga4",
+                    "displayValue": "GA4"
+                  },
+                  {
+                    "value": "uaee",
+                    "displayValue": "UA Enhanced Ecommerce"
+                  }
+                ],
+                "simpleValueType": true,
+                "defaultValue": "auto"
+              }
+            ]
           },
           {
             "value": "customObject",
@@ -237,10 +269,27 @@ ___TEMPLATE_PARAMETERS___
             "subParams": [
               {
                 "type": "SELECT",
-                "name": "customObject",
-                "displayName": "Ecommerce Object",
+                "name": "dataSourceCustomObjectFormat",
+                "displayName": "Custom Object format",
                 "macrosInSelect": true,
-                "selectItems": [],
+                "selectItems": [
+                  {
+                    "value": "auto",
+                    "displayValue": "Autodetect"
+                  },
+                  {
+                    "value": "gtag",
+                    "displayValue": "GTAG"
+                  },
+                  {
+                    "value": "ga4",
+                    "displayValue": "GA4"
+                  },
+                  {
+                    "value": "uaee",
+                    "displayValue": "UA Enhanced Ecommerce"
+                  }
+                ],
                 "simpleValueType": true,
                 "enablingConditions": [
                   {
@@ -248,7 +297,8 @@ ___TEMPLATE_PARAMETERS___
                     "paramValue": "customObject",
                     "type": "EQUALS"
                   }
-                ]
+                ],
+                "defaultValue": "auto"
               }
             ]
           },
@@ -538,6 +588,79 @@ ___TEMPLATE_PARAMETERS___
   },
   {
     "type": "GROUP",
+    "name": "consentSettings",
+    "displayName": "Consent settings",
+    "groupStyle": "ZIPPY_CLOSED",
+    "subParams": [
+      {
+        "type": "SELECT",
+        "name": "consentSource",
+        "displayName": "Define consent source",
+        "macrosInSelect": false,
+        "selectItems": [
+          {
+            "value": "googleConsentMode",
+            "displayValue": "Use Google Consent Mode"
+          },
+          {
+            "value": "customConsentMode",
+            "displayValue": "Load consent status from variable"
+          }
+        ],
+        "simpleValueType": true,
+        "defaultValue": "googleConsentMode"
+      },
+      {
+        "type": "GROUP",
+        "name": "googleConsentModeSettings",
+        "displayName": "",
+        "groupStyle": "NO_ZIPPY",
+        "subParams": [
+          {
+            "type": "CHECKBOX",
+            "name": "googleConsentModeDisableConsentUpdateListener",
+            "checkboxText": "Disable Consent Update Listener",
+            "simpleValueType": true,
+            "help": "If enabled, the request is automatically sent after consent is granted. Otherwise, you need to run consent update event or rerun the tags again",
+            "defaultValue": false
+          }
+        ],
+        "enablingConditions": [
+          {
+            "paramName": "consentSource",
+            "paramValue": "googleConsentMode",
+            "type": "EQUALS"
+          }
+        ]
+      },
+      {
+        "type": "GROUP",
+        "name": "customConsentModeSettings",
+        "displayName": "",
+        "groupStyle": "NO_ZIPPY",
+        "subParams": [
+          {
+            "type": "TEXT",
+            "name": "customConsentModeStatus",
+            "displayName": "Consent status",
+            "simpleValueType": true,
+            "help": "Use true/false, 1/0, granted/denied",
+            "valueHint": "e.g. granted"
+          }
+        ],
+        "enablingConditions": [
+          {
+            "paramName": "consentSource",
+            "paramValue": "customConsentMode",
+            "type": "EQUALS"
+          }
+        ],
+        "help": "Custom consent mode requires \"Consent update\" event to be fired upon consent status change"
+      }
+    ]
+  },
+  {
+    "type": "GROUP",
     "name": "advancedConfiguration",
     "displayName": "Advanced configuration",
     "groupStyle": "ZIPPY_CLOSED",
@@ -566,30 +689,44 @@ const addConsentListener   = require('addConsentListener');
 const templateStorage      = require('templateStorage');
 const copyFromDataLayer    = require('copyFromDataLayer');
 const makeNumber           = require('makeNumber');
+//const logToConsole         = require('logToConsole');
 
 // globals
 const url                  = 'https://glamipixel.com/js/compiled/pt.js';
-const templateVersion      = '2.0';
+const templateVersion      = '2.0.1';
 const source               = 'gtm'+templateVersion;
-const trackerName          = data.trackerName ? data.trackerName + '.' : '';
+const trackerName          = data.trackerName || '';
+const trackerPrefix        = trackerName ? trackerName + '.' : '';
 
 // init arguments queue
 const glami = createArgumentsQueue('glami', 'glami.q');
 setInWindow('GlamiTrackerObject', 'glami');
 
-// consent, consent change listener
-let consent = isConsentGranted('analytics_storage') ? 1 : 0;
-addConsentListener(
-  'analytics_storage',  
-  (consentType, granted) => {
-    if(consentType == 'analytics_storage'){
-      consent = granted ? 1 : 0;
-      glamiPixel.set();
-    }
-  }
-);
 
-// pixel definiction
+
+// consent
+var consent = -1;
+// google consent mode
+if(data.consentSource == 'googleConsentMode'){
+  consent = isConsentGranted('analytics_storage') ? 1 : 0;    
+  
+  if(!data.googleConsentModeDisableConsentUpdateListener){
+    addConsentListener('analytics_storage', (consentType, granted) => {
+      if(consentType == 'analytics_storage'){
+        consent = granted ? 1 : 0;
+        glamiPixel.set();
+      }
+    });
+  }
+} else { // customConsentMode
+  if(data.customConsentModeStatus.toLowerCase() == 'granted' || data.customConsentModeStatus.toLowerCase() == 'true' || consent == true || consent == 1) consent = 1;
+  else if(data.customConsentModeStatus.toLowerCase() == 'denied' || data.customConsentModeStatus.toLowerCase() == 'false' || consent == false || consent == 0) consent = 0;
+  
+}
+
+
+
+// pixel definition
 const glamiPixel = (() => {
   let load = () => {
     if(templateStorage.getItem('glamiPixelLoaded') !== true) {
@@ -610,7 +747,7 @@ const glamiPixel = (() => {
   };
   
   let trackEvent = (eventName, eventParams) => {
-    callInWindow('glami', trackerName + 'track', eventName, eventParams);
+    callInWindow('glami', trackerPrefix + 'track', eventName, eventParams);
   };
   
   
@@ -622,12 +759,14 @@ const glamiPixel = (() => {
   };
 })();
 
+
+
 //
 // business logic below
 //
 
 let guaEE={}, ga4Event={}, ga4EventModel={};
-
+    
 if(data.dataSource == 'dataLayer'){
   guaEE            = copyFromDataLayer('ecommerce') || {};
   ga4Event         = copyFromDataLayer('event') || {};
@@ -643,31 +782,146 @@ if(data.tagType == 'configuration') glamiPixel.create();
 
 let glamiPixelEvents = [];
 
+// consent update
+if(data.tagType == 'consentUpdate') glamiPixel.set();
+
 // pageView
 if(data.tagType == 'pageView' || data.sendPageView == true) glamiPixel.trackEvent('PageView', {consent: consent});
 
-// viewContentProduct
-if(data.eventName == 'viewContentProduct') glamiPixel.trackEvent('ViewContent', {'consent': consent, 'content_type': 'product', 'item_ids': data.viewContentProductId});
-if(guaEE.hasOwnProperty('detail'))         glamiPixel.trackEvent('ViewContent', {'consent': consent, 'content_type': 'product', 'item_ids': (guaEE.detail.products || []).map((elm)=>{return elm.id;})});
-if(ga4Event == 'view_item' && ga4EventModel.hasOwnProperty('items'))                glamiPixel.trackEvent('ViewContent', {'consent': consent, 'content_type': 'product', 'item_ids': (ga4EventModel.items || []).map((elm)=>{return elm.item_id;})});
-if(ga4Event == 'view_item')                glamiPixel.trackEvent('ViewContent', {'consent': consent, 'content_type': 'product', 'item_ids': (guaEE.items || []).map((elm)=>{return elm.item_id;})});
 
-// viewContentCategory
-if(data.eventName == 'viewContentCategory') glamiPixel.trackEvent('ViewContent', {'consent': consent, 'content_type': 'category', 'item_ids': data.viewContentProductIds});
-if(guaEE.hasOwnProperty('impressions'))     glamiPixel.trackEvent('ViewContent', {'consent': consent, 'content_type': 'category', 'item_ids': (guaEE.impressions.products || []).map((elm)=>{return elm.id;})});
-if(ga4Event == 'view_item_list')            glamiPixel.trackEvent('ViewContent', {'consent': consent, 'content_type': 'category', 'item_ids': (ga4EventModel.items || []).map((elm)=>{return elm.item_id;})});
+// detect format
+//UA
+if((data.dataSource == 'dataLayer' || data.dataSource == 'customObject') && (data.dataSourceDataLayerFormat == 'auto' || data.dataSourceDataLayerFormat == 'uaee')){
+  if(guaEE.hasOwnProperty('detail'))      processEcommerceEvent('uaee', 'view_item'); 
+  if(guaEE.hasOwnProperty('impressions')) processEcommerceEvent('uaee', 'view_item_list'); 
+  if(guaEE.hasOwnProperty('add'))         processEcommerceEvent('uaee', 'add_to_cart'); 
+  if(guaEE.hasOwnProperty('purchase'))    processEcommerceEvent('uaee', 'purchase'); 
+}
 
-// addToCart
-if(data.eventName == 'addToCart') glamiPixel.trackEvent('AddToCart', {'consent': consent, 'item_ids': data.addToCartProductIds, 'value': data.addToCartProductPrice, 'currency': data.addToCartCurrency});
-if(guaEE.hasOwnProperty('add'))   glamiPixel.trackEvent('AddToCart', {'consent': consent, 'item_ids': (guaEE.add.products || []).map((elm)=>{return elm.id;}), 'value': (guaEE.add.products || []).reduce((prev,elm)=>{return prev + makeNumber(elm.price);}, 0), 'currency': guaEE.currencyCode});
-if(ga4Event == 'add_to_cart' && ga4EventModel.hasOwnProperty('items'))     glamiPixel.trackEvent('AddToCart', {'consent': consent, 'item_ids': (ga4EventModel.items || []).map((elm)=>{return elm.item_id;}), 'value': ga4EventModel.value, 'currency': ga4EventModel.currency});
-if(ga4Event == 'add_to_cart')     glamiPixel.trackEvent('AddToCart', {'consent': consent, 'item_ids': (guaEE.items || []).map((elm)=>{return elm.item_id;}), 'value': guaEE.value, 'currency': guaEE.currency});
 
-// purchase
-if(data.eventName == 'purchase')     glamiPixel.trackEvent('Purchase', {'consent': consent, 'item_ids': data.productIds, 'value': data.orderValue, 'currency': data.currency, 'transaction_id': data.transactionId});
-if(guaEE.hasOwnProperty('purchase')) glamiPixel.trackEvent('Purchase', {'consent': consent, 'item_ids': (guaEE.purchase.products || []).map((elm)=>{return elm.id;}), 'value': (guaEE.purchase.actionField || {}).revenue, 'currency': guaEE.currencyCode, 'transaction_id': (guaEE.purchase.actionField || {}).id});
-if(ga4Event == 'purchase' && ga4EventModel.hasOwnProperty('items'))           glamiPixel.trackEvent('Purchase', {'consent': consent, 'item_ids': (ga4EventModel.items || []).map((elm)=>{return elm.item_id;}), 'value': ga4EventModel.value, 'currency': ga4EventModel.currency, 'transaction_id': ga4EventModel.transaction_id});
-if(ga4Event == 'purchase')           glamiPixel.trackEvent('Purchase', {'consent': consent, 'item_ids': (guaEE.items || []).map((elm)=>{return elm.item_id;}), 'value': guaEE.value, 'currency': guaEE.currency, 'transaction_id': guaEE.transaction_id});
+//GTAG
+if((data.dataSource == 'dataLayer' || data.dataSource == 'customObject') && (data.dataSourceDataLayerFormat == 'auto' || data.dataSourceDataLayerFormat == 'gtag')){
+  if(ga4Event == 'view_item'      && ga4EventModel.hasOwnProperty('items')) processEcommerceEvent('gtag', 'view_item'); 
+  if(ga4Event == 'view_item_list' && ga4EventModel.hasOwnProperty('items')) processEcommerceEvent('gtag', 'view_item_list'); 
+  if(ga4Event == 'add_to_cart'    && ga4EventModel.hasOwnProperty('items')) processEcommerceEvent('gtag', 'add_to_cart'); 
+  if(ga4Event == 'purchase'       && ga4EventModel.hasOwnProperty('items')) processEcommerceEvent('gtag', 'purchase'); 
+}
+
+
+//GA4
+if((data.dataSource == 'dataLayer' || data.dataSource == 'customObject') && (data.dataSourceDataLayerFormat == 'auto' || data.dataSourceDataLayerFormat == 'ga4')){
+  if(ga4Event == 'view_item'      && guaEE.hasOwnProperty('items')) processEcommerceEvent('ga4', 'view_item');
+  if(ga4Event == 'view_item_list' && guaEE.hasOwnProperty('items')) processEcommerceEvent('ga4', 'view_item_list');
+  if(ga4Event == 'add_to_cart'    && guaEE.hasOwnProperty('items')) processEcommerceEvent('ga4', 'add_to_cart');
+  if(ga4Event == 'purchase'       && guaEE.hasOwnProperty('items')) processEcommerceEvent('ga4', 'purchase');
+}
+
+
+//Manual
+if((data.dataSource == 'manualConfiguration')){
+  if(data.eventName == 'viewContentProduct')  processEcommerceEvent('manual', 'view_item');
+  if(data.eventName == 'viewContentCategory') processEcommerceEvent('manual', 'view_item_list');
+  if(data.eventName == 'addToCart')           processEcommerceEvent('manual', 'add_to_cart');
+  if(data.eventName == 'purchase')            processEcommerceEvent('manual', 'purchase');  
+}
+
+
+// prepare input values function
+function processEcommerceEvent(dataFormat, eventName){
+  let eventData = false;
+  
+  switch(dataFormat){
+    case 'uaee':
+      let itemIds, ecommerceValue, transactionId;
+      switch(eventName){
+        case 'view_item':
+          itemIds = (guaEE.detail.products || []).map((elm)=>{return elm.id;});
+          break;
+        case 'view_item_list':
+          itemIds = (guaEE.impressions.products || guaEE.impressions || []).map((elm)=>{return elm.id;});
+          break;
+        case 'add_to_cart':
+          itemIds = (guaEE.add.products || []).map((elm)=>{return elm.id;});
+          ecommerceValue = (guaEE.add.products || []).reduce((prev,elm)=>{return prev + makeNumber(elm.price);}, 0); 
+          break;
+        case 'purchase':
+          itemIds = (guaEE.purchase.products || []).map((elm)=>{return elm.id;});
+          ecommerceValue = (guaEE.purchase.actionField || {}).revenue;
+          transactionId = (guaEE.purchase.actionField || {}).id;          
+      }
+     
+      eventData = {
+        item_ids:       itemIds,
+        value:          ecommerceValue,
+        currency:       guaEE.currencyCode,
+        transaction_id: transactionId
+      };
+      break;
+
+    case 'gtag':
+      eventData = {
+        item_ids:       (ga4EventModel.items || []).map((elm)=>{return elm.item_id;}),
+        value:          ga4EventModel.value,
+        currency:       ga4EventModel.currency,
+        transaction_id: ga4EventModel.transaction_id
+      };
+      break;
+
+    case 'ga4':
+      eventData = {
+        item_ids:       (guaEE.items || []).map((elm)=>{return elm.item_id;}),
+        value:          guaEE.value,
+        currency:       guaEE.currency,
+        transaction_id: guaEE.transaction_id
+      };
+      break;
+
+    case 'manual':
+      eventData = {
+        item_ids:       {
+          'view_content':      data.viewContentProductId,
+          'view_content_list': data.viewContentProductIds,
+          'add_to_cart':       data.addToCartProductIds,
+          'purchase':          data.productIds
+        }[eventName],
+        value:          {
+          'add_to_cart':       data.addToCartProductPrice,
+          'purchase':          data.orderValue
+        }[eventName], 
+        currency:       {
+          'add_to_cart':       data.addToCartCurrency,
+          'purchase':          data.currency
+        }[eventName], 
+        transaction_id: data.transactionId
+      };
+      break;
+  }
+
+  if(eventData !== false){
+    sendEcommerceEvent(eventName, eventData);
+  }
+}
+
+
+
+// send events function
+function sendEcommerceEvent(eventName, eventData){
+  switch(eventName){
+    case 'view_item':
+      glamiPixel.trackEvent('ViewContent', {'consent': consent, 'content_type': 'product', 'item_ids': eventData.item_ids});
+      break;
+    case 'view_item_list':
+      glamiPixel.trackEvent('ViewContent', {'consent': consent, 'content_type': 'category', 'item_ids': eventData.item_ids});
+      break;
+    case 'add_to_cart':
+      glamiPixel.trackEvent('AddToCart', {'consent': consent, 'item_ids': eventData.item_ids, 'value': eventData.value, 'currency': eventData.currency});
+      break;
+    case 'purchase':
+      glamiPixel.trackEvent('Purchase', {'consent': consent, 'item_ids': eventData.item_ids, 'value': eventData.value, 'currency': eventData.currency, 'transaction_id': eventData.transaction_id});
+      break;
+  }
+}
+
 
 
 data.gtmOnSuccess();
@@ -883,6 +1137,37 @@ ___WEB_PERMISSIONS___
                     "boolean": false
                   }
                 ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "consentType"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
+                    "string": "ad_storage"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
               }
             ]
           }
@@ -956,5 +1241,3 @@ scenarios: []
 ___NOTES___
 
 Created on 17.10.2023, 11:49:07
-
-
