@@ -1,5 +1,5 @@
 homepage: "www.glami.cz"
 documentation: "https://www.glami.cz/info/pixel/?locale=en_US"
 versions:
-  - sha: 0b2428f3db005434b793e5c034988d2fac7b3690
-    changeNotes: Enhanced datalayer structure autodetection
+  - sha: cfdadb06c17447cc48077d341ee654fb0ddd5272
+    changeNotes: Add missing DataLayer structure and manual configuration options
